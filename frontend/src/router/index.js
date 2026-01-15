@@ -149,7 +149,27 @@ export const constantRoutes = [
         path: 'system',
         component: () => import('@/views/welfare/system/index.vue'),
         name: 'WelfareSystem',
-        meta: { title: '系统管理', icon: 'setting' }
+        meta: { title: '系统管理', icon: 'system' }
+      },      
+      {
+        path: 'donation',
+        component: () => import('@/views/welfare/donation/list.vue'),
+        name: 'WelfareDonation',
+        meta: { title: '捐款管理', icon: 'money' } 
+      },
+      {
+        path: 'donation/detail/:id(\\d+)',
+        component: () => import('@/views/welfare/donation/detail.vue'),
+        name: 'WelfareDonationDetail',
+        hidden: true,
+        meta: { title: '捐款详情', activeMenu: '/welfare/donation' }
+      },
+      {
+        path: 'donation/create',
+        component: () => import('@/views/welfare/donation/create.vue'),
+        name: 'WelfareDonationCreate',
+        hidden: true,
+        meta: { title: '发起捐款', activeMenu: '/welfare/donation' }
       },      
 
     ]
