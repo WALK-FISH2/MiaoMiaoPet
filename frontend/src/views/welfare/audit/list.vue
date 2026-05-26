@@ -3,245 +3,188 @@
     <div class="page-title">内容审核</div>
 
     <el-card shadow="hover" class="panel">
-      <!-- tabs -->
       <div class="tabs-row">
-        <div
-          class="tab"
-          :class="{ active: tab === 'all' }"
-          @click="setTab('all')"
-        >
-          全部 ({{ countAll }})
+        <div class="tab" :class="{ active: tab === 'all' }" @click="setTab('all')">
+          全部 ({{ total }})
         </div>
-        <div
-          class="tab"
-          :class="{ active: tab === 'photo' }"
-          @click="setTab('photo')"
-        >
-          照片 ({{ countPhoto }})
+        <div class="tab" :class="{ active: tab === 'photo' }" @click="setTab('photo')">
+          照片 ({{ total }})
         </div>
-        <div
-          class="tab"
-          :class="{ active: tab === 'blog' }"
-          @click="setTab('blog')"
-        >
-          博客 ({{ countBlog }})
+        <div class="tab disabled">
+          博客 (0)
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <!-- search -->
       <div class="search-row">
         <el-input
           v-model="query.keyword"
           class="search-input"
-          placeholder="搜索内容..."
+          placeholder="搜索上传人、宠物、地点或描述..."
           clearable
-          @keyup.enter="onSearch"
+          @keyup.enter="getList"
         />
-        <el-select v-model="query.status" class="search-select" placeholder="全部状态" clearable>
+        <el-select v-model="query.status" class="search-select" placeholder="全部状态" clearable @change="getList">
           <el-option label="待审核" value="pending" />
           <el-option label="已通过" value="approved" />
           <el-option label="已拒绝" value="rejected" />
         </el-select>
 
-        <el-button type="primary" class="search-btn" @click="onSearch">
-          <el-icon style="margin-right: 6px;"><Search /></el-icon>
+        <el-button type="primary" class="search-btn" @click="getList">
+          <el-icon class="btn-icon"><Search /></el-icon>
           搜索
         </el-button>
       </div>
     </el-card>
 
-    <!-- list -->
-    <el-card shadow="hover" class="panel" style="margin-top: 14px;">
-      <div v-if="pagedList.length === 0" class="empty">暂无数据</div>
+    <el-card shadow="hover" class="panel list-panel">
+      <div v-loading="loading">
+        <div v-if="rows.length === 0" class="empty">暂无数据</div>
 
-      <div v-for="item in pagedList" :key="item.id" class="audit-item" :style="{ '--bar': item.barColor, '--bg': item.bgColor }">
-        <div class="audit-left">
-          <div class="thumb" :style="{ background: item.thumbBg }"></div>
-        </div>
-
-        <div class="audit-mid">
-          <div class="title-line">
-            <span class="title">{{ item.title }}</span>
+        <div
+          v-for="item in rows"
+          :key="item.id"
+          class="audit-item"
+          :class="item.status"
+        >
+          <div class="audit-left">
+            <el-image
+              v-if="item.cover"
+              class="thumb"
+              :src="item.cover"
+              :preview-src-list="item.imageList"
+              preview-teleported
+              fit="cover"
+            />
+            <div v-else class="thumb empty-thumb">无图</div>
           </div>
 
-          <div class="meta">
-            <div v-if="item.type === 'photo'">
-              关联宠物：{{ item.petName }} · {{ item.location }}
+          <div class="audit-mid">
+            <div class="title-line">
+              <span class="title">{{ item.uploaderName || `用户 ${item.userId}` }} 上传的照片</span>
             </div>
-            <div v-else>
-              标题：{{ item.blogTitle }}
+
+            <div class="meta">关联宠物：{{ item.petName || '-' }} · {{ item.location || '-' }}</div>
+            <div class="meta">上传时间：{{ item.createdAt || item.shootTime || '-' }}</div>
+            <div v-if="item.description" class="meta desc">描述：{{ item.description }}</div>
+
+            <div class="tags-row">
+              <span class="status-tag" :class="item.status">{{ statusText(item.status) }}</span>
+              <span class="type-tag">照片</span>
+              <span v-if="item.isDailyWinner === 1" class="featured-tag">精选</span>
             </div>
           </div>
 
-          <div class="meta">上传时间：{{ item.time }}</div>
-
-          <div class="tags-row">
-            <span class="status-tag" :class="item.status">{{ statusText(item.status) }}</span>
-            <span class="type-tag">
-              <span class="type-icon">{{ item.type === 'photo' ? "🖼️" : "📝" }}</span>
-              {{ item.type === 'photo' ? "照片" : "博客" }}
-            </span>
-
-            <span v-if="item.featured" class="featured-tag">⭐ 精选</span>
+          <div class="audit-right">
+            <template v-if="item.status === 'pending'">
+              <el-button type="success" @click="approve(item)">通过</el-button>
+              <el-button type="danger" @click="reject(item)">拒绝</el-button>
+            </template>
           </div>
         </div>
 
-        <div class="audit-right">
-          <template v-if="item.status === 'pending'">
-            <el-button type="success" @click="approve(item)">✓ 通过</el-button>
-            <el-button type="danger" @click="reject(item)">✕ 拒绝</el-button>
-            <el-button type="primary" @click="toggleFeatured(item)">
-              ⭐ 标记精选
-            </el-button>
-          </template>
-
-          <el-button @click="goDetail(item.id)">查看详情</el-button>
+        <div class="pager-row">
+          <div class="pager-left">显示第 {{ pageStart }}-{{ pageEnd }} 条，共 {{ total }} 条</div>
+          <el-pagination
+            v-model:current-page="query.pageNum"
+            v-model:page-size="query.pageSize"
+            :total="total"
+            layout="prev, pager, next"
+            :pager-count="5"
+            @current-change="getList"
+          />
         </div>
-      </div>
-
-      <!-- pager -->
-      <div class="pager-row">
-        <div class="pager-left">显示第 {{ pageStart }}-{{ pageEnd }} 条，共 {{ total }} 条</div>
-        <el-pagination
-          v-model:current-page="page.pageNum"
-          v-model:page-size="page.pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          :pager-count="5"
-          @current-change="onPageChange"
-        />
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Search } from "@element-plus/icons-vue";
+import { listAuditPhotos, reviewAuditPhoto } from "@/api/welfare/audit";
 
-const router = useRouter();
+const tab = ref("photo");
+const loading = ref(false);
+const rows = ref([]);
+const total = ref(0);
 
-const tab = ref("all"); // all | photo | blog
 const query = reactive({
+  pageNum: 1,
+  pageSize: 10,
   keyword: "",
   status: "",
 });
 
-const page = reactive({
-  pageNum: 1,
-  pageSize: 10,
-});
-
-/** mock 数据（按你截图的两条样式：待审核橙色、已通过绿色） */
-const list = ref([
-  {
-    id: 1,
-    type: "photo",
-    title: "用户A 上传的照片",
-    petName: "小橘",
-    location: "北京大学",
-    time: "2024-01-20 14:30",
-    status: "pending", // pending|approved|rejected
-    featured: false,
-    barColor: "#ff8a00",
-    bgColor: "#fff7ed",
-    thumbBg: "linear-gradient(135deg,#f7d794,#546de5)",
-    blogTitle: "",
-  },
-  {
-    id: 2,
-    type: "blog",
-    title: "用户B 发布的博客",
-    blogTitle: "今天在图书馆门口看到小橘，它正在晒太阳",
-    time: "2024-01-20 13:45",
-    status: "approved",
-    featured: false,
-    barColor: "#16a34a",
-    bgColor: "#f0fdf4",
-    thumbBg: "linear-gradient(135deg,#f78fb3,#c44569)",
-    petName: "",
-    location: "",
-  },
-]);
-
-/** 统计 */
-const countAll = computed(() => list.value.length);
-const countPhoto = computed(() => list.value.filter((x) => x.type === "photo").length);
-const countBlog = computed(() => list.value.filter((x) => x.type === "blog").length);
+const pageStart = computed(() => (total.value === 0 ? 0 : (query.pageNum - 1) * query.pageSize + 1));
+const pageEnd = computed(() => Math.min(query.pageNum * query.pageSize, total.value));
 
 function setTab(v) {
+  if (v === "blog") return;
   tab.value = v;
-  page.pageNum = 1;
+  query.pageNum = 1;
+  getList();
 }
 
-function statusText(s) {
-  return s === "pending" ? "待审核" : s === "approved" ? "已通过" : "已拒绝";
+function statusText(status) {
+  if (status === "pending") return "待审核";
+  if (status === "approved") return "已通过";
+  if (status === "rejected") return "已拒绝";
+  return status || "-";
 }
 
-/** 过滤 */
-const filteredList = computed(() => {
-  const kw = query.keyword.trim();
-  return list.value.filter((x) => {
-    const hitTab = tab.value === "all" || x.type === tab.value;
-    const hitStatus = !query.status || x.status === query.status;
-    const hitKw =
-      !kw ||
-      x.title.includes(kw) ||
-      (x.blogTitle && x.blogTitle.includes(kw)) ||
-      (x.petName && x.petName.includes(kw)) ||
-      (x.location && x.location.includes(kw));
-    return hitTab && hitStatus && hitKw;
-  });
-});
-
-const total = computed(() => filteredList.value.length);
-
-const pagedList = computed(() => {
-  const start = (page.pageNum - 1) * page.pageSize;
-  return filteredList.value.slice(start, start + page.pageSize);
-});
-
-const pageStart = computed(() => (total.value === 0 ? 0 : (page.pageNum - 1) * page.pageSize + 1));
-const pageEnd = computed(() => Math.min(page.pageNum * page.pageSize, total.value));
-
-function onSearch() {
-  page.pageNum = 1;
+function parseImages(images) {
+  if (!images) return [];
+  if (Array.isArray(images)) return images;
+  try {
+    const parsed = JSON.parse(images);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
-function onPageChange() {}
+
+async function getList() {
+  loading.value = true;
+  try {
+    const res = await listAuditPhotos(query);
+    rows.value = (res.rows || []).map((item) => {
+      const imageList = parseImages(item.images);
+      return {
+        ...item,
+        imageList,
+        cover: imageList[0] || "",
+      };
+    });
+    total.value = res.total || 0;
+  } finally {
+    loading.value = false;
+  }
+}
 
 async function approve(item) {
-  item.status = "approved";
-  item.barColor = "#16a34a";
-  item.bgColor = "#f0fdf4";
-  ElMessage.success("已通过（mock）");
+  await reviewAuditPhoto(item.id, { status: "approved" });
+  ElMessage.success("已通过");
+  getList();
 }
 
 async function reject(item) {
   try {
-    await ElMessageBox.confirm("确定拒绝该内容吗？", "拒绝确认", {
-      type: "warning",
+    const { value } = await ElMessageBox.prompt("请输入拒绝原因", "拒绝确认", {
       confirmButtonText: "拒绝",
       cancelButtonText: "取消",
+      inputPlaceholder: "可选",
+      type: "warning",
     });
-    item.status = "rejected";
-    item.barColor = "#ef4444";
-    item.bgColor = "#fff1f2";
-    ElMessage.success("已拒绝（mock）");
+    await reviewAuditPhoto(item.id, { status: "rejected", rejectReason: value || "" });
+    ElMessage.success("已拒绝");
+    getList();
   } catch {}
 }
 
-function toggleFeatured(item) {
-  item.featured = !item.featured;
-  ElMessage.success(item.featured ? "已标记精选" : "已取消精选");
-}
-
-function goDetail(id) {
-  router.push(`/welfare/audit/detail/${id}`);
-}
+onMounted(getList);
 </script>
 
 <style scoped>
@@ -259,202 +202,194 @@ function goDetail(id) {
 }
 
 .panel {
-  border-radius: 12px;
-  border: none;
+  border-radius: 8px;
 }
 
-/* tabs */
 .tabs-row {
   display: flex;
   gap: 10px;
-  padding: 10px 8px 6px;
 }
 
 .tab {
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 10px;
+  padding: 8px 16px;
+  border-radius: 8px;
   background: #f3f4f6;
   color: #374151;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
   font-weight: 600;
-  user-select: none;
+  cursor: pointer;
 }
 
 .tab.active {
-  background: #2f7bff;
+  background: #2563eb;
   color: #fff;
+}
+
+.tab.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .divider {
   height: 1px;
   background: #e5e7eb;
-  margin: 8px 8px 10px;
+  margin: 14px 0;
 }
 
-/* search */
 .search-row {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 0 8px 12px;
 }
 
 .search-input {
   flex: 1;
 }
 
-.search-input :deep(.el-input__wrapper) {
-  background: #2f343a;
-  border-radius: 8px;
-  box-shadow: none;
-}
-.search-input :deep(.el-input__inner) {
-  color: #fff;
-}
-.search-input :deep(.el-input__inner::placeholder) {
-  color: rgba(255, 255, 255, 0.65);
-}
-
 .search-select {
-  width: 160px;
+  width: 180px;
 }
 
 .search-btn {
-  width: 110px;
+  min-width: 110px;
 }
 
-/* item */
+.btn-icon {
+  margin-right: 6px;
+}
+
+.list-panel {
+  margin-top: 14px;
+}
+
+.empty {
+  padding: 42px 0;
+  color: #909399;
+  text-align: center;
+}
+
 .audit-item {
-  position: relative;
-  border-radius: 12px;
-  background: var(--bg);
-  padding: 16px 16px 16px 18px;
-  display: grid;
-  grid-template-columns: 92px 1fr auto;
-  gap: 14px;
-  margin: 14px 8px;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border-left: 4px solid #ff8a00;
+  border-radius: 8px;
+  background: #fff7ed;
 }
 
-.audit-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 12px;
-  bottom: 12px;
-  width: 4px;
-  border-radius: 4px;
-  background: var(--bar);
+.audit-item.approved {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.audit-item.rejected {
+  border-left-color: #ef4444;
+  background: #fff1f2;
+}
+
+.audit-left {
+  width: 76px;
+  flex: 0 0 76px;
 }
 
 .thumb {
-  width: 74px;
-  height: 74px;
-  border-radius: 12px;
+  width: 76px;
+  height: 76px;
+  border-radius: 8px;
+  display: block;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.empty-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.audit-mid {
+  min-width: 0;
+  flex: 1;
 }
 
 .title {
-  font-weight: 800;
   color: #111827;
-  font-size: 14px;
+  font-weight: 700;
 }
 
 .meta {
   margin-top: 6px;
-  font-size: 12px;
-  color: #6b7280;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.desc {
+  max-width: 760px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tags-row {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   margin-top: 10px;
 }
 
-.status-tag {
-  font-size: 12px;
-  padding: 2px 10px;
+.status-tag,
+.type-tag,
+.featured-tag {
+  padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.65);
-  color: #111827;
-  font-weight: 600;
+  font-size: 12px;
+  line-height: 18px;
 }
+
 .status-tag.pending {
-  color: #ff8a00;
+  color: #b45309;
+  background: #fef3c7;
 }
+
 .status-tag.approved {
-  color: #16a34a;
+  color: #15803d;
+  background: #dcfce7;
 }
+
 .status-tag.rejected {
-  color: #ef4444;
+  color: #b91c1c;
+  background: #fee2e2;
 }
 
 .type-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #111827;
-  opacity: 0.85;
-}
-.type-icon {
-  font-size: 13px;
+  color: #2563eb;
+  background: #dbeafe;
 }
 
 .featured-tag {
-  font-size: 12px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.65);
-  color: #2563eb;
-  font-weight: 700;
+  color: #9333ea;
+  background: #f3e8ff;
 }
 
 .audit-right {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
+  justify-content: flex-end;
+  width: 190px;
 }
 
-/* pager */
 .pager-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 14px 8px 8px;
+  align-items: center;
+  padding-top: 14px;
 }
 
 .pager-left {
-  font-size: 12px;
   color: #6b7280;
-}
-
-.empty {
-  padding: 30px 10px;
-  text-align: center;
-  color: #9ca3af;
-}
-
-/* responsive */
-@media (max-width: 992px) {
-  .search-row {
-    flex-wrap: wrap;
-  }
-  .search-select,
-  .search-btn {
-    width: 100%;
-  }
-  .audit-item {
-    grid-template-columns: 92px 1fr;
-  }
-  .audit-right {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
-    margin-top: 10px;
-  }
+  font-size: 13px;
 }
 </style>

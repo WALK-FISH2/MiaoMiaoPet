@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.WelfareAuditPhotoMapper">
+
+    <resultMap type="WelfareAuditPhoto" id="WelfareAuditPhotoResult">
+        <id property="id" column="id" />
+        <result property="petId" column="pet_id" />
+        <result property="userId" column="user_id" />
+        <result property="images" column="images" />
+        <result property="description" column="description" />
+        <result property="location" column="location" />
+        <result property="shootTime" column="shoot_time" />
+        <result property="status" column="status" />
+        <result property="isDailyWinner" column="is_daily_winner" />
+        <result property="rejectReason" column="reject_reason" />
+        <result property="createdAt" column="created_at" />
+        <result property="petName" column="pet_name" />
+        <result property="uploaderName" column="uploader_name" />
+    </resultMap>
+
+    <select id="selectPhotoAuditList" resultMap="WelfareAuditPhotoResult">
+        select
+            p.id,
+            p.pet_id,
+            p.user_id,
+            cast(p.images as char) as images,
+            p.description,
+            p.location,
+            p.shoot_time,
+            p.status,
+            p.is_daily_winner,
+            p.reject_reason,
+            p.created_at,
+            pet.name as pet_name,
+            u.nickname as uploader_name
+        from photos p
+        left join pets pet on pet.id = p.pet_id
+        left join users u on u.id = p.user_id
+        <where>
+            p.deleted_at is null
+            <if test="status != null and status != ''">
+                and p.status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    p.description like concat('%', #{keyword}, '%')
+                    or p.location like concat('%', #{keyword}, '%')
+                    or pet.name like concat('%', #{keyword}, '%')
+                    or u.nickname like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        order by p.created_at desc
+    </select>
+
+    <update id="updatePhotoReview">
+        update photos
+        set status = #{status},
+            reviewed_by = #{reviewedBy},
+            reviewed_at = sysdate(),
+            reject_reason = #{rejectReason},
+            updated_at = sysdate()
+        where id = #{id}
+          and deleted_at is null
+    </update>
+</mapper>
