@@ -14,7 +14,7 @@
         <div class="tab" :class="{ active: tab === 'rejected' }" @click="setTab('rejected')">
           已拒绝 ({{ countRejected }})
         </div>
-        <div class="tab" :class="{ active: tab === 'done' }" @click="setTab('done')">
+        <div class="tab" :class="{ active: tab === 'completed' }" @click="setTab('completed')">
           已完成 ({{ countDone }})
         </div>
       </div>
@@ -34,7 +34,7 @@
           <el-option label="待审核" value="pending" />
           <el-option label="已通过" value="approved" />
           <el-option label="已拒绝" value="rejected" />
-          <el-option label="已完成" value="done" />
+          <el-option label="已完成" value="completed" />
         </el-select>
         <el-button type="primary" class="search-btn" @click="onSearch">
           <el-icon style="margin-right: 6px;"><Search /></el-icon>
@@ -45,11 +45,12 @@
 
     <!-- list -->
     <el-card shadow="hover" class="panel" style="margin-top: 14px;">
-      <div v-if="pagedList.length === 0" class="empty">暂无数据</div>
+      <div v-if="!loading && list.length === 0" class="empty">暂无数据</div>
 
       <div
-        v-for="item in pagedList"
+        v-for="item in list"
         :key="item.id"
+        v-loading="loading"
         class="apply-item"
         :style="{ '--bar': item.barColor, '--bg': item.bgColor }"
       >
@@ -101,14 +102,19 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Search } from "@element-plus/icons-vue";
+import {
+  getAdoptionStats,
+  listAdoptionApplications,
+  reviewAdoptionApplication,
+} from "@/api/welfare/adoption";
 
 const router = useRouter();
 
-const tab = ref("pending"); // pending/approved/rejected/done
+const tab = ref("pending"); // pending/approved/rejected/completed
 const query = reactive({
   keyword: "",
   status: "",
@@ -119,45 +125,32 @@ const page = reactive({
   pageSize: 10,
 });
 
-/** mock 数据：按你截图的两条（待审核橙色、已通过绿色） */
-const list = ref([
-  {
-    id: 1,
-    applicant: "张三",
-    petId: 1,
-    petName: "小橘",
-    location: "北京大学",
-    time: "2024-01-20 10:30",
-    status: "pending",
-    phoneMasked: "138****8888",
-    barColor: "#ff8a00",
-    bgColor: "#fff7ed",
-    thumbBg: "linear-gradient(135deg,#f7d794,#546de5)",
-  },
-  {
-    id: 2,
-    applicant: "李四",
-    petId: 2,
-    petName: "小花",
-    location: "清华大学",
-    time: "2024-01-19 15:20",
-    status: "approved",
-    phoneMasked: "139****9999",
-    barColor: "#16a34a",
-    bgColor: "#f0fdf4",
-    thumbBg: "linear-gradient(135deg,#f78fb3,#c44569)",
-  },
-]);
+const loading = ref(false);
+const total = ref(0);
+const list = ref([]);
+const stats = reactive({
+  pending: 0,
+  approved: 0,
+  rejected: 0,
+  completed: 0,
+});
+
+onMounted(() => {
+  getList();
+  refreshStats();
+});
 
 /** tab 统计 */
-const countPending = computed(() => list.value.filter((x) => x.status === "pending").length);
-const countApproved = computed(() => list.value.filter((x) => x.status === "approved").length);
-const countRejected = computed(() => list.value.filter((x) => x.status === "rejected").length);
-const countDone = computed(() => list.value.filter((x) => x.status === "done").length);
+const countPending = computed(() => stats.pending);
+const countApproved = computed(() => stats.approved);
+const countRejected = computed(() => stats.rejected);
+const countDone = computed(() => stats.completed);
 
 function setTab(v) {
   tab.value = v;
   page.pageNum = 1;
+  query.status = "";
+  getList();
 }
 
 function statusText(s) {
@@ -170,35 +163,43 @@ function statusText(s) {
     : "已完成";
 }
 
-/** 过滤 */
-const filteredList = computed(() => {
-  const kw = query.keyword.trim();
-  return list.value.filter((x) => {
-    const hitTab = x.status === tab.value;
-    const hitStatus = !query.status || x.status === query.status;
-    const hitKw =
-      !kw ||
-      x.applicant.includes(kw) ||
-      x.petName.includes(kw) ||
-      x.location.includes(kw);
-    return hitTab && hitStatus && hitKw;
-  });
-});
-
-const total = computed(() => filteredList.value.length);
-
-const pagedList = computed(() => {
-  const start = (page.pageNum - 1) * page.pageSize;
-  return filteredList.value.slice(start, start + page.pageSize);
-});
-
 const pageStart = computed(() => (total.value === 0 ? 0 : (page.pageNum - 1) * page.pageSize + 1));
 const pageEnd = computed(() => Math.min(page.pageNum * page.pageSize, total.value));
 
 function onSearch() {
   page.pageNum = 1;
+  getList();
 }
-function onPageChange() {}
+function onPageChange() {
+  getList();
+}
+
+async function getList() {
+  loading.value = true;
+  try {
+    const status = query.status || tab.value;
+    const res = await listAdoptionApplications({
+      pageNum: page.pageNum,
+      pageSize: page.pageSize,
+      status,
+      keyword: query.keyword,
+    });
+    total.value = res.total || 0;
+    list.value = (res.rows || []).map(normalizeApplication);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function refreshStats() {
+  const res = await getAdoptionStats();
+  Object.assign(stats, {
+    pending: res.data?.pending || 0,
+    approved: res.data?.approved || 0,
+    rejected: res.data?.rejected || 0,
+    completed: res.data?.completed || 0,
+  });
+}
 
 function goPet(petId) {
   router.push(`/welfare/pet/edit/${petId}`);
@@ -208,30 +209,71 @@ function goDetail(id) {
   router.push(`/welfare/adoption/detail/${id}`);
 }
 
-function approve(item) {
-  item.status = "approved";
-  item.barColor = "#16a34a";
-  item.bgColor = "#f0fdf4";
-  ElMessage.success("已通过（mock）");
+async function approve(item) {
+  await reviewAdoptionApplication(item.id, {
+    status: "approved",
+    adminNotes: "审批通过",
+  });
+  ElMessage.success("已通过申请");
+  getList();
+  refreshStats();
 }
 
 async function reject(item) {
   try {
-    await ElMessageBox.confirm("确定拒绝该申请吗？", "拒绝确认", {
+    const { value } = await ElMessageBox.prompt("请输入拒绝原因", "拒绝确认", {
       type: "warning",
       confirmButtonText: "拒绝",
       cancelButtonText: "取消",
+      inputType: "textarea",
+      inputPattern: /\S+/,
+      inputErrorMessage: "拒绝原因不能为空",
     });
-    item.status = "rejected";
-    item.barColor = "#ef4444";
-    item.bgColor = "#fff1f2";
-    ElMessage.success("已拒绝（mock）");
+    await reviewAdoptionApplication(item.id, {
+      status: "rejected",
+      rejectReason: value,
+      adminNotes: value,
+    });
+    ElMessage.success("已拒绝申请");
+    getList();
+    refreshStats();
   } catch {}
 }
 
 function contact(item) {
   // 后续可以弹出联系弹窗（电话/微信/站内信），这里先提示
   ElMessage.info(`联系申请人：${item.applicant}（${item.phoneMasked}）`);
+}
+
+function normalizeApplication(row) {
+  const colors = statusColors(row.status);
+  return {
+    id: row.id,
+    applicant: row.name || row.userNickname || "-",
+    petId: row.petId,
+    petName: row.petName || "-",
+    location: row.locationName || "-",
+    time: row.createdAt || "-",
+    status: row.status,
+    phone: row.phone || "",
+    phoneMasked: maskPhone(row.phone),
+    barColor: colors.bar,
+    bgColor: colors.bg,
+    thumbBg: row.petMainImage
+      ? `url(${row.petMainImage}) center/cover no-repeat`
+      : "linear-gradient(135deg,#f7d794,#546de5)",
+  };
+}
+
+function statusColors(status) {
+  if (status === "approved") return { bar: "#16a34a", bg: "#f0fdf4" };
+  if (status === "rejected") return { bar: "#ef4444", bg: "#fff1f2" };
+  if (status === "completed") return { bar: "#2563eb", bg: "#eff6ff" };
+  return { bar: "#ff8a00", bg: "#fff7ed" };
+}
+
+function maskPhone(phone = "") {
+  return phone.replace(/^(\d{3})\d{4}(\d+)$/, "$1****$2") || "-";
 }
 </script>
 
@@ -382,7 +424,7 @@ function contact(item) {
 .status-tag.rejected {
   color: #ef4444;
 }
-.status-tag.done {
+.status-tag.completed {
   color: #2563eb;
 }
 

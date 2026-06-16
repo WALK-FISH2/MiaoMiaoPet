@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.WelfareAdoptionMapper">
+
+    <resultMap type="WelfareAdoptionApplication" id="WelfareAdoptionApplicationResult">
+        <id property="id" column="id" />
+        <result property="petId" column="pet_id" />
+        <result property="userId" column="user_id" />
+        <result property="name" column="name" />
+        <result property="phone" column="phone" />
+        <result property="wechat" column="wechat" />
+        <result property="city" column="city" />
+        <result property="address" column="address" />
+        <result property="age" column="age" />
+        <result property="occupation" column="occupation" />
+        <result property="income" column="income" />
+        <result property="hasHouse" column="has_house" />
+        <result property="houseType" column="house_type" />
+        <result property="houseArea" column="house_area" />
+        <result property="allowPet" column="allow_pet" />
+        <result property="petExperience" column="pet_experience" />
+        <result property="hasPets" column="has_pets" />
+        <result property="currentPets" column="current_pets" />
+        <result property="adoptionReason" column="adoption_reason" />
+        <result property="acceptRegularVisit" column="accept_regular_visit" />
+        <result property="houseImages" column="house_images" />
+        <result property="otherInfo" column="other_info" />
+        <result property="status" column="status" />
+        <result property="reviewedBy" column="reviewed_by" />
+        <result property="reviewedAt" column="reviewed_at" />
+        <result property="rejectReason" column="reject_reason" />
+        <result property="adoptionDate" column="adoption_date" />
+        <result property="adoptionContract" column="adoption_contract" />
+        <result property="adminNotes" column="admin_notes" />
+        <result property="createdAt" column="created_at" />
+        <result property="updatedAt" column="updated_at" />
+        <result property="petName" column="pet_name" />
+        <result property="petBreed" column="pet_breed" />
+        <result property="petGender" column="pet_gender" />
+        <result property="petAge" column="pet_age" />
+        <result property="petStatus" column="pet_status" />
+        <result property="petMainImage" column="pet_main_image" />
+        <result property="locationName" column="location_name" />
+        <result property="userNickname" column="user_nickname" />
+    </resultMap>
+
+    <sql id="selectApplicationVo">
+        select
+            a.id,
+            a.pet_id,
+            a.user_id,
+            a.name,
+            a.phone,
+            a.wechat,
+            a.city,
+            a.address,
+            a.age,
+            a.occupation,
+            a.income,
+            a.has_house,
+            a.house_type,
+            a.house_area,
+            a.allow_pet,
+            a.pet_experience,
+            a.has_pets,
+            a.current_pets,
+            a.adoption_reason,
+            a.accept_regular_visit,
+            cast(a.house_images as char) as house_images,
+            a.other_info,
+            a.status,
+            a.reviewed_by,
+            a.reviewed_at,
+            a.reject_reason,
+            a.adoption_date,
+            cast(a.adoption_contract as char) as adoption_contract,
+            a.admin_notes,
+            a.created_at,
+            a.updated_at,
+            p.name as pet_name,
+            p.breed as pet_breed,
+            p.gender as pet_gender,
+            p.age as pet_age,
+            p.status as pet_status,
+            p.main_image as pet_main_image,
+            l.name as location_name,
+            u.nickname as user_nickname
+        from adoption_applications a
+        left join pets p on p.id = a.pet_id
+        left join locations l on l.id = p.location_id
+        left join users u on u.id = a.user_id
+    </sql>
+
+    <select id="selectApplicationList" resultMap="WelfareAdoptionApplicationResult">
+        <include refid="selectApplicationVo" />
+        <where>
+            a.deleted_at is null
+            <if test="status != null and status != ''">
+                and a.status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    a.name like concat('%', #{keyword}, '%')
+                    or a.phone like concat('%', #{keyword}, '%')
+                    or p.name like concat('%', #{keyword}, '%')
+                    or l.name like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        order by a.created_at desc, a.id desc
+    </select>
+
+    <select id="selectApplicationById" parameterType="Long" resultMap="WelfareAdoptionApplicationResult">
+        <include refid="selectApplicationVo" />
+        where a.id = #{id}
+          and a.deleted_at is null
+    </select>
+
+    <select id="selectApplicationStats" resultType="WelfareAdoptionStats">
+        select
+            sum(case when status = 'pending' then 1 else 0 end) as pending,
+            sum(case when status = 'approved' then 1 else 0 end) as approved,
+            sum(case when status = 'rejected' then 1 else 0 end) as rejected,
+            sum(case when status = 'completed' then 1 else 0 end) as completed
+        from adoption_applications
+        where deleted_at is null
+    </select>
+
+    <update id="updateApplicationReview">
+        update adoption_applications
+        set status = #{status},
+            reviewed_by = #{reviewedBy},
+            reviewed_at = sysdate(),
+            reject_reason = #{rejectReason},
+            admin_notes = #{adminNotes},
+            adoption_date = case when #{status} = 'completed' then sysdate() else adoption_date end,
+            updated_at = sysdate()
+        where id = #{id}
+          and deleted_at is null
+    </update>
+
+    <update id="updatePetStatus">
+        update pets
+        set status = #{status},
+            updated_at = sysdate()
+        where id = #{petId}
+    </update>
+</mapper>

@@ -5,8 +5,8 @@
       <el-button class="back-btn" @click="goBack">← 返回</el-button>
       <div class="topbar-title">领养申请详情</div>
       <div class="topbar-actions">
-        <el-button type="success" @click="onApprove">✓ 通过申请</el-button>
-        <el-button type="danger" @click="onReject">✕ 拒绝申请</el-button>
+        <el-button v-if="data.status === 'pending'" type="success" @click="onApprove">✓ 通过申请</el-button>
+        <el-button v-if="data.status === 'pending'" type="danger" @click="onReject">✕ 拒绝申请</el-button>
         <el-button type="primary" @click="onContact">💬 联系申请人</el-button>
       </div>
     </div>
@@ -100,6 +100,8 @@
             <div v-else-if="data.status === 'approved'">• 已通过审核，等待签署领养协议/交接</div>
             <div v-else-if="data.status === 'rejected'">• 已拒绝：{{ data.reviewNote || '（无）' }}</div>
             <div v-else>• 领养流程已完成</div>
+            <div v-if="data.reviewedAt">• 审核时间：{{ data.reviewedAt }}</div>
+            <div v-if="data.reviewNote">• 审核意见：{{ data.reviewNote }}</div>
           </div>
         </div>
       </div>
@@ -119,9 +121,13 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, reactive, ref } from "vue";
+import { computed, defineComponent, h, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  getAdoptionApplication,
+  reviewAdoptionApplication,
+} from "@/api/welfare/adoption";
 
 const router = useRouter();
 const route = useRoute();
@@ -129,60 +135,59 @@ const id = Number(route.params.id);
 
 const reviewNote = ref("");
 
-/** mock 数据（后续接后端：getAdoptionDetail(id)） */
 const data = reactive({
   id,
-  status: "pending", // pending|approved|rejected|done
-  applyTime: "2024-01-20 10:30",
+  status: "pending", // pending|approved|rejected|completed
+  applyTime: "",
   reviewNote: "",
+  reviewedAt: "",
 
   pet: {
-    id: 1,
-    name: "小橘",
-    breed: "橘猫",
+    id: undefined,
+    name: "",
+    breed: "",
     gender: "male",
-    ageText: "约2岁",
-    location: "北京大学 - 图书馆附近",
-    statusText: "待领养",
+    ageText: "",
+    location: "",
+    statusText: "",
     thumbBg: "linear-gradient(135deg, #ffd89b 0%, #19547b 100%)",
   },
 
   applicant: {
-    name: "张三",
-    phoneMasked: "138****8888",
-    wechat: "wx_zhangsan",
-    city: "北京市",
-    address: "海淀区中关村大街1号",
-    age: 28,
-    job: "软件工程师",
-    income: "15000-20000元",
+    name: "",
+    phoneMasked: "",
+    phone: "",
+    wechat: "",
+    city: "",
+    address: "",
+    age: "",
+    job: "",
+    income: "",
   },
 
-  reason:
-    "我一直很喜欢小动物，特别是猫咪。在平台上看到小橘的照片后，被它可爱的样子深深吸引。我目前有稳定的工作和收入，居住环境也适合养猫，有足够的空间和时间来照顾它。我会给它一个温暖的家，定期带它体检，保证它的健康。希望能有机会领养小橘，让它成为我的家人。",
+  reason: "",
 
   env: {
-    ownHouse: true,
-    houseType: "商品房",
-    area: "80平方米",
-    allowPets: true,
-    windowSafe: true,
-    windowSafeText: "✓ 已封窗",
-    familyMembers: "2人（本人+配偶）",
-    raisedBefore: true,
+    ownHouse: false,
+    houseType: "",
+    area: "",
+    allowPets: false,
+    windowSafe: false,
+    windowSafeText: "未填写",
+    familyMembers: "未填写",
+    raisedBefore: false,
     currentPets: "无",
-    expYears: "3-5年",
-    acceptVisit: true,
+    expYears: "未填写",
+    acceptVisit: false,
   },
 
-  envPhotos: [
-    { id: 1, bg: "linear-gradient(135deg, #ffd89b 0%, #19547b 100%)" },
-    { id: 2, bg: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
-    { id: 3, bg: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)" },
-  ],
+  envPhotos: [],
 
-  extra:
-    "我家里已经准备好了猫砂盆、猫粮、猫玩具等所有必需品，并且已经了解了猫咪的基本护理知识。我会定期带它去体检，保证它的健康。如果遇到任何问题，我会及时联系平台寻求帮助。",
+  extra: "",
+});
+
+onMounted(() => {
+  loadDetail();
 });
 
 function goBack() {
@@ -205,10 +210,13 @@ function statusText(s) {
 
 async function onApprove() {
   if (data.status === "approved") return ElMessage.info("该申请已通过");
-  if (data.status === "done") return ElMessage.info("该申请已完成");
-  data.status = "approved";
-  data.reviewNote = reviewNote.value.trim();
-  ElMessage.success("已通过申请（mock）");
+  if (data.status === "completed") return ElMessage.info("该申请已完成");
+  await reviewAdoptionApplication(id, {
+    status: "approved",
+    adminNotes: reviewNote.value.trim() || "审批通过",
+  });
+  ElMessage.success("已通过申请");
+  loadDetail();
 }
 
 async function onReject() {
@@ -221,14 +229,92 @@ async function onReject() {
       confirmButtonText: "拒绝",
       cancelButtonText: "取消",
     });
-    data.status = "rejected";
-    data.reviewNote = reviewNote.value.trim();
-    ElMessage.success("已拒绝申请（mock）");
+    await reviewAdoptionApplication(id, {
+      status: "rejected",
+      rejectReason: reviewNote.value.trim(),
+      adminNotes: reviewNote.value.trim(),
+    });
+    ElMessage.success("已拒绝申请");
+    loadDetail();
   } catch {}
 }
 
 function onContact() {
   ElMessage.info(`联系申请人：${data.applicant.name}（${data.applicant.phoneMasked}）`);
+}
+
+async function loadDetail() {
+  const res = await getAdoptionApplication(id);
+  fillDetail(res.data || {});
+}
+
+function fillDetail(row) {
+  data.id = row.id;
+  data.status = row.status || "pending";
+  data.applyTime = row.createdAt || "";
+  data.reviewNote = row.rejectReason || row.adminNotes || "";
+  data.reviewedAt = row.reviewedAt || "";
+  reviewNote.value = data.reviewNote;
+
+  data.pet.id = row.petId;
+  data.pet.name = row.petName || "-";
+  data.pet.breed = row.petBreed || "-";
+  data.pet.gender = row.petGender || "male";
+  data.pet.ageText = row.petAge || "-";
+  data.pet.location = row.locationName || "-";
+  data.pet.statusText = petStatusText(row.petStatus);
+  data.pet.thumbBg = row.petMainImage
+    ? `url(${row.petMainImage}) center/cover no-repeat`
+    : "linear-gradient(135deg, #ffd89b 0%, #19547b 100%)";
+
+  data.applicant.name = row.name || "-";
+  data.applicant.phone = row.phone || "";
+  data.applicant.phoneMasked = maskPhone(row.phone);
+  data.applicant.wechat = row.wechat || "-";
+  data.applicant.city = row.city || "-";
+  data.applicant.address = row.address || "-";
+  data.applicant.age = row.age || "-";
+  data.applicant.job = row.occupation || "-";
+  data.applicant.income = row.income ? `${row.income}元` : "-";
+
+  data.reason = row.adoptionReason || "未填写";
+  data.env.ownHouse = row.hasHouse === 1;
+  data.env.houseType = row.houseType || "-";
+  data.env.area = row.houseArea ? `${row.houseArea}平方米` : "-";
+  data.env.allowPets = row.allowPet === 1;
+  data.env.windowSafe = false;
+  data.env.windowSafeText = "未填写";
+  data.env.familyMembers = "未填写";
+  data.env.raisedBefore = row.hasPets === 1;
+  data.env.currentPets = row.currentPets || "无";
+  data.env.expYears = row.petExperience || "未填写";
+  data.env.acceptVisit = row.acceptRegularVisit === 1;
+  data.envPhotos = parseJsonArray(row.houseImages).map((url, index) => ({
+    id: index + 1,
+    bg: `url(${url}) center/cover no-repeat`,
+  }));
+  data.extra = row.otherInfo || "未填写";
+}
+
+function petStatusText(status) {
+  if (status === "available") return "待领养";
+  if (status === "adopting") return "领养中";
+  if (status === "adopted") return "已领养";
+  return "-";
+}
+
+function parseJsonArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function maskPhone(phone = "") {
+  return phone.replace(/^(\d{3})\d{4}(\d+)$/, "$1****$2") || "-";
 }
 
 /** 小组件：信息卡 */
@@ -449,7 +535,7 @@ const InfoCard = defineComponent({
 .record-status.rejected {
   color: #ef4444;
 }
-.record-status.done {
+.record-status.completed {
   color: #2563eb;
 }
 

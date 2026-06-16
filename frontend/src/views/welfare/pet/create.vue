@@ -33,6 +33,14 @@
           </el-col>
 
           <el-col :xs="24" :md="12">
+            <el-form-item label="所属地点" prop="locationId">
+              <el-select v-model="form.locationId" class="dark-input" placeholder="请选择所属地点" filterable>
+                <el-option v-for="item in locationOptions" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
             <el-form-item label="性别" prop="gender">
               <el-select v-model="form.gender" class="dark-input" placeholder="请选择">
                 <el-option label="公" value="male" />
@@ -63,10 +71,9 @@
           <el-col :xs="24" :md="12">
             <el-form-item label="状态" prop="status">
               <el-select v-model="form.status" class="dark-input">
-                <el-option label="待领养" value="pending" />
+                <el-option label="待领养" value="available" />
                 <el-option label="领养中" value="adopting" />
                 <el-option label="已领养" value="adopted" />
-                <el-option label="暂停展示" value="hidden" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -81,6 +88,12 @@
                 format="YYYY/MM/DD"
                 placeholder="年 / 月 / 日"
               />
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
+            <el-form-item label="发现地点" prop="foundLocation">
+              <el-input v-model="form.foundLocation" class="dark-input" placeholder="如：图书馆门口" />
             </el-form-item>
           </el-col>
 
@@ -139,10 +152,11 @@
 </template>
 
 <script setup>
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { FolderChecked } from "@element-plus/icons-vue";
+import { addPet, listPetLocations, uploadPetImage } from "@/api/welfare/pet";
 
 const router = useRouter();
 const formRef = ref();
@@ -150,18 +164,21 @@ const formRef = ref();
 const form = reactive({
   name: "",
   nickname: "",
+  locationId: undefined,
   gender: "",
   ageText: "",
   breed: "",
   color: "",
-  status: "pending",
+  status: "available",
   foundAt: "",
+  foundLocation: "",
   temperament: "",
   places: "",
 });
 
 const rules = {
   name: [{ required: true, message: "请输入宠物名称", trigger: "blur" }],
+  locationId: [{ required: true, message: "请选择所属地点", trigger: "change" }],
   gender: [{ required: true, message: "请选择性别", trigger: "change" }],
   breed: [{ required: true, message: "请输入品种", trigger: "blur" }],
   status: [{ required: true, message: "请选择状态", trigger: "change" }],
@@ -169,6 +186,12 @@ const rules = {
 };
 
 const photos = ref([]); // 新增页默认空
+const locationOptions = ref([]);
+
+onMounted(async () => {
+  const res = await listPetLocations();
+  locationOptions.value = res.data || [];
+});
 
 function goBack() {
   router.back();
@@ -203,6 +226,8 @@ function onPickFiles(e) {
     const url = URL.createObjectURL(f);
     return {
       id: startId + idx,
+      file: f,
+      url,
       isCover: photos.value.length === 0 && idx === 0, // 第一张默认封面
       bg: `url(${url}) center/cover no-repeat`,
     };
@@ -226,12 +251,48 @@ async function onSave() {
       photos.value[0].isCover = true;
     }
 
-    // TODO：后续接后端：createPet(form + photos)，返回 id
-    ElMessage.success("保存成功（mock）");
+    const imageUrls = await uploadPhotos();
+    const payload = buildPayload(imageUrls);
+    await addPet(payload);
+    ElMessage.success("保存成功");
     router.push("/welfare/pet");
   } catch {
     // 校验失败
   }
+}
+
+async function uploadPhotos() {
+  const result = [];
+  for (const photo of photos.value) {
+    const res = await uploadPetImage(photo.file);
+    result.push({ ...photo, url: res.url });
+  }
+  return result;
+}
+
+function buildPayload(imagePhotos) {
+  const locations = form.places
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const cover = imagePhotos.find((item) => item.isCover) || imagePhotos[0];
+  return {
+    locationId: form.locationId,
+    name: form.name,
+    nickname: form.nickname,
+    gender: form.gender,
+    age: form.ageText,
+    breed: form.breed,
+    color: form.color,
+    personality: form.temperament,
+    status: form.status,
+    foundDate: form.foundAt,
+    foundLocation: form.foundLocation || locations[0] || "",
+    frequentLocations: JSON.stringify(locations),
+    mainImage: cover?.url || "",
+    images: JSON.stringify(imagePhotos.map((item) => item.url)),
+    photoCount: imagePhotos.length,
+  };
 }
 </script>
 

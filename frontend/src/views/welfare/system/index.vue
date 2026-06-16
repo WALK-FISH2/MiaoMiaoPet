@@ -505,6 +505,7 @@ function sendNotice() {
   border-radius: 10px;
   height: 36px;
   font-weight: 900;
+  
 }
 
 /* responsive */

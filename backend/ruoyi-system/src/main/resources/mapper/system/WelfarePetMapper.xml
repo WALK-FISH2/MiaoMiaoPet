@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.WelfarePetMapper">
+
+    <resultMap type="WelfarePet" id="WelfarePetResult">
+        <id property="id" column="id" />
+        <result property="locationId" column="location_id" />
+        <result property="locationName" column="location_name" />
+        <result property="name" column="name" />
+        <result property="nickname" column="nickname" />
+        <result property="gender" column="gender" />
+        <result property="age" column="age" />
+        <result property="breed" column="breed" />
+        <result property="color" column="color" />
+        <result property="personality" column="personality" />
+        <result property="status" column="status" />
+        <result property="foundDate" column="found_date" />
+        <result property="foundLocation" column="found_location" />
+        <result property="lastSeenDate" column="last_seen_date" />
+        <result property="lastSeenLocation" column="last_seen_location" />
+        <result property="frequentLocations" column="frequent_locations" />
+        <result property="mainImage" column="main_image" />
+        <result property="images" column="images" />
+        <result property="heatScore" column="heat_score" />
+        <result property="likeCount" column="like_count" />
+        <result property="commentCount" column="comment_count" />
+        <result property="photoCount" column="photo_count" />
+        <result property="followCount" column="follow_count" />
+        <result property="createdAt" column="created_at" />
+        <result property="updatedAt" column="updated_at" />
+    </resultMap>
+
+    <sql id="selectPetVo">
+        select
+            p.id,
+            p.location_id,
+            l.name as location_name,
+            p.name,
+            p.nickname,
+            p.gender,
+            p.age,
+            p.breed,
+            p.color,
+            p.personality,
+            p.status,
+            p.found_date,
+            p.found_location,
+            p.last_seen_date,
+            p.last_seen_location,
+            cast(p.frequent_locations as char) as frequent_locations,
+            p.main_image,
+            cast(p.images as char) as images,
+            p.heat_score,
+            p.like_count,
+            p.comment_count,
+            p.photo_count,
+            p.follow_count,
+            p.created_at,
+            p.updated_at
+        from pets p
+        left join locations l on l.id = p.location_id
+    </sql>
+
+    <select id="selectPetList" resultMap="WelfarePetResult">
+        <include refid="selectPetVo" />
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (p.name like concat('%', #{keyword}, '%')
+                    or p.nickname like concat('%', #{keyword}, '%')
+                    or p.breed like concat('%', #{keyword}, '%'))
+            </if>
+            <if test="status != null and status != ''">
+                and p.status = #{status}
+            </if>
+            <if test="breed != null and breed != ''">
+                and p.breed = #{breed}
+            </if>
+        </where>
+        order by p.updated_at desc, p.id desc
+    </select>
+
+    <select id="selectPetById" parameterType="Long" resultMap="WelfarePetResult">
+        <include refid="selectPetVo" />
+        where p.id = #{id}
+    </select>
+
+    <insert id="insertPet" parameterType="WelfarePet" useGeneratedKeys="true" keyProperty="id">
+        insert into pets
+        (
+            location_id, name, nickname, gender, age, breed, color, personality, status,
+            found_date, found_location, last_seen_date, last_seen_location,
+            frequent_locations, main_image, images, photo_count
+        )
+        values
+        (
+            #{locationId}, #{name}, #{nickname}, #{gender}, #{age}, #{breed}, #{color}, #{personality}, #{status},
+            #{foundDate}, #{foundLocation}, #{lastSeenDate}, #{lastSeenLocation},
+            #{frequentLocations}, #{mainImage}, #{images}, #{photoCount}
+        )
+    </insert>
+
+    <update id="updatePet" parameterType="WelfarePet">
+        update pets
+        set location_id = #{locationId},
+            name = #{name},
+            nickname = #{nickname},
+            gender = #{gender},
+            age = #{age},
+            breed = #{breed},
+            color = #{color},
+            personality = #{personality},
+            status = #{status},
+            found_date = #{foundDate},
+            found_location = #{foundLocation},
+            last_seen_date = #{lastSeenDate},
+            last_seen_location = #{lastSeenLocation},
+            frequent_locations = #{frequentLocations},
+            main_image = #{mainImage},
+            images = #{images},
+            photo_count = #{photoCount},
+            updated_at = sysdate()
+        where id = #{id}
+    </update>
+
+    <delete id="deletePetById" parameterType="Long">
+        delete from pets
+        where id = #{id}
+    </delete>
+
+    <select id="countPetReferences" parameterType="Long" resultType="int">
+        select
+            (select count(1) from adoption_applications where pet_id = #{id})
+            + (select count(1) from comments where pet_id = #{id})
+            + (select count(1) from daily_rankings where pet_id = #{id})
+            + (select count(1) from follows where pet_id = #{id})
+            + (select count(1) from growth_timeline where pet_id = #{id})
+            + (select count(1) from health_records where pet_id = #{id})
+            + (select count(1) from photos where pet_id = #{id})
+            + (select count(1) from posts where pet_id = #{id})
+    </select>
+
+    <select id="selectLocationOptions" resultType="WelfareLocationOption">
+        select id, name
+        from locations
+        order by name asc
+    </select>
+</mapper>

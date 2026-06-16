@@ -19,7 +19,8 @@
           @keyup.enter="onSearch"
         />
         <el-select v-model="query.status" class="search-select" placeholder="全部状态" clearable>
-          <el-option label="待领养" value="pending" />
+          <el-option label="待领养" value="available" />
+          <el-option label="领养中" value="adopting" />
           <el-option label="已领养" value="adopted" />
         </el-select>
         <el-select v-model="query.breed" class="search-select" placeholder="全部品种" clearable>
@@ -44,7 +45,8 @@
 
       <!-- 表格 -->
       <el-table
-        :data="pagedList"
+        v-loading="loading"
+        :data="list"
         style="width: 100%;"
         row-key="id"
         @selection-change="handleSelectionChange"
@@ -67,12 +69,20 @@
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag
-              v-if="row.status === 'pending'"
+              v-if="row.status === 'available'"
               class="status-tag pending"
               effect="plain"
               round
             >
               待领养
+            </el-tag>
+            <el-tag
+              v-else-if="row.status === 'adopting'"
+              class="status-tag adopting"
+              effect="plain"
+              round
+            >
+              领养中
             </el-tag>
             <el-tag
               v-else
@@ -127,6 +137,7 @@
           :total="total"
           layout="prev, pager, next"
           :pager-count="5"
+          @size-change="getList"
           @current-change="onPageChange"
         />
       </div>
@@ -135,10 +146,11 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Plus, Search } from "@element-plus/icons-vue";
+import { deletePet, listPets } from "@/api/welfare/pet";
 
 const router = useRouter();
 
@@ -157,52 +169,13 @@ const page = reactive({
   pageSize: 10
 });
 
-/** mock 列表（后面接接口时，把 list 改为接口返回 rows） */
-const list = ref([
-  {
-    id: 1,
-    name: "小橘",
-    breed: "橘猫",
-    genderText: "公",
-    ageText: "约2岁",
-    status: "pending",
-    hot: 9999,
-    likes: 888,
-    comments: 222,
-    updatedDate: "2024-01-20",
-    updatedTime: "14:30",
-    avatarBg: "linear-gradient(135deg,#f7d794,#546de5)",
-  },
-  {
-    id: 2,
-    name: "小花",
-    breed: "三花",
-    genderText: "母",
-    ageText: "约1.5岁",
-    status: "pending",
-    hot: 8888,
-    likes: 777,
-    comments: 111,
-    updatedDate: "2024-01-19",
-    updatedTime: "18:00",
-    avatarBg: "linear-gradient(135deg,#f78fb3,#c44569)",
-  },
-  {
-    id: 3,
-    name: "小黑",
-    breed: "黑猫",
-    genderText: "公",
-    ageText: "约3岁",
-    status: "adopted",
-    hot: 7777,
-    likes: 666,
-    comments: 99,
-    updatedDate: "2024-01-18",
-    updatedTime: "16:20",
-    avatarBg: "linear-gradient(135deg,#2ed573,#1e90ff)",
-  },
-  // 你可以继续加数据测试分页
-]);
+const loading = ref(false);
+const total = ref(0);
+const list = ref([]);
+
+onMounted(() => {
+  getList();
+});
 
 /** 选择 */
 const multipleSelection = ref([]);
@@ -210,34 +183,33 @@ function handleSelectionChange(val) {
   multipleSelection.value = val;
 }
 
-/** 过滤后的列表 */
-const filteredList = computed(() => {
-  const kw = query.keyword.trim();
-  return list.value.filter((x) => {
-    const hitKw = !kw || x.name.includes(kw) || x.breed.includes(kw);
-    const hitStatus = !query.status || x.status === query.status;
-    const hitBreed = !query.breed || x.breed === query.breed;
-    return hitKw && hitStatus && hitBreed;
-  });
-});
-
-const total = computed(() => filteredList.value.length);
-
-/** 当前页数据 */
-const pagedList = computed(() => {
-  const start = (page.pageNum - 1) * page.pageSize;
-  return filteredList.value.slice(start, start + page.pageSize);
-});
-
 const pageStart = computed(() => (total.value === 0 ? 0 : (page.pageNum - 1) * page.pageSize + 1));
 const pageEnd = computed(() => Math.min(page.pageNum * page.pageSize, total.value));
 
+async function getList() {
+  loading.value = true;
+  try {
+    const res = await listPets({
+      pageNum: page.pageNum,
+      pageSize: page.pageSize,
+      keyword: query.keyword,
+      status: query.status,
+      breed: query.breed
+    });
+    total.value = res.total || 0;
+    list.value = (res.rows || []).map(normalizePetRow);
+  } finally {
+    loading.value = false;
+  }
+}
+
 function onSearch() {
   page.pageNum = 1;
+  getList();
 }
 
 function onPageChange() {
-  // 这里留空即可（computed 会自动更新）
+  getList();
 }
 
 function onBatch() {
@@ -263,12 +235,36 @@ async function onDelete(row) {
       confirmButtonText: "删除",
       cancelButtonText: "取消",
     });
-    list.value = list.value.filter((x) => x.id !== row.id);
+    await deletePet(row.id);
     ElMessage.success("已删除");
-    if (pagedList.value.length === 0 && page.pageNum > 1) page.pageNum -= 1;
+    if (list.value.length === 1 && page.pageNum > 1) page.pageNum -= 1;
+    getList();
   } catch {
     // cancel
   }
+}
+
+function normalizePetRow(row) {
+  const updated = splitDateTime(row.updatedAt || row.createdAt);
+  return {
+    ...row,
+    genderText: row.gender === "female" ? "母" : "公",
+    ageText: row.age || "-",
+    hot: row.heatScore || 0,
+    likes: row.likeCount || 0,
+    comments: row.commentCount || 0,
+    updatedDate: updated.date,
+    updatedTime: updated.time,
+    avatarBg: row.mainImage
+      ? `url(${row.mainImage}) center/cover no-repeat`
+      : "linear-gradient(135deg,#f7d794,#546de5)",
+  };
+}
+
+function splitDateTime(value) {
+  if (!value) return { date: "-", time: "" };
+  const [date, time = ""] = value.split(" ");
+  return { date, time: time.slice(0, 5) };
 }
 </script>
 
@@ -381,6 +377,11 @@ async function onDelete(row) {
   color: #16a34a;
   border-color: #dcfce7;
   background: #f0fdf4;
+}
+.status-tag.adopting {
+  color: #2563eb;
+  border-color: #dbeafe;
+  background: #eff6ff;
 }
 
 .hot-wrap {

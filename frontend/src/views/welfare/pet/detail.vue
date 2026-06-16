@@ -17,6 +17,26 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-row :gutter="16">
           <el-col :xs="24" :md="12">
+            <el-form-item label="宠物名称" prop="name">
+              <el-input v-model="form.name" class="dark-input" placeholder="请输入宠物名称" />
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
+            <el-form-item label="昵称" prop="nickname">
+              <el-input v-model="form.nickname" class="dark-input" placeholder="可选" />
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
+            <el-form-item label="所属地点" prop="locationId">
+              <el-select v-model="form.locationId" class="dark-input" placeholder="请选择所属地点" filterable>
+                <el-option v-for="item in locationOptions" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
             <el-form-item label="性别" prop="gender">
               <el-select v-model="form.gender" class="dark-input" placeholder="请选择性别">
                 <el-option label="公" value="male" />
@@ -46,10 +66,9 @@
           <el-col :xs="24" :md="12">
             <el-form-item label="状态" prop="status">
               <el-select v-model="form.status" class="dark-input" placeholder="请选择状态">
-                <el-option label="待领养" value="pending" />
-                <el-option label="已领养" value="adopted" />
+                <el-option label="待领养" value="available" />
                 <el-option label="领养中" value="adopting" />
-                <el-option label="暂停展示" value="hidden" />
+                <el-option label="已领养" value="adopted" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -64,6 +83,12 @@
                 format="YYYY/MM/DD"
                 placeholder="选择日期"
               />
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
+            <el-form-item label="发现地点" prop="foundLocation">
+              <el-input v-model="form.foundLocation" class="dark-input" placeholder="如：图书馆门口" />
             </el-form-item>
           </el-col>
 
@@ -125,33 +150,38 @@
 </template>
 
 <script setup>
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { FolderChecked } from "@element-plus/icons-vue";
+import { getPet, listPetLocations, updatePet, uploadPetImage } from "@/api/welfare/pet";
 
 const router = useRouter();
 const route = useRoute();
 const formRef = ref();
 
-/** mock：根据 id 回显（后面接接口时换成 getPet(id)） */
 const petId = Number(route.params.id);
 
 /** 表单数据 */
 const form = reactive({
   id: petId,
-  name: "小橘",
-  gender: "male",
-  ageText: "约2岁",
-  breed: "橘猫",
-  color: "橘白相间",
-  status: "pending",
-  foundAt: "2023-01-15",
-  temperament: "温顺亲人，喜欢被摸头，不怕生人",
-  places: "图书馆\n食堂\n教学楼A座",
+  name: "",
+  nickname: "",
+  locationId: undefined,
+  gender: "",
+  ageText: "",
+  breed: "",
+  color: "",
+  status: "available",
+  foundAt: "",
+  foundLocation: "",
+  temperament: "",
+  places: "",
 });
 
 const rules = {
+  name: [{ required: true, message: "请输入宠物名称", trigger: "blur" }],
+  locationId: [{ required: true, message: "请选择所属地点", trigger: "change" }],
   gender: [{ required: true, message: "请选择性别", trigger: "change" }],
   ageText: [{ required: true, message: "请输入年龄", trigger: "blur" }],
   breed: [{ required: true, message: "请输入品种", trigger: "blur" }],
@@ -159,12 +189,38 @@ const rules = {
   foundAt: [{ required: true, message: "请选择发现时间", trigger: "change" }],
 };
 
-/** 图片数据（mock：用渐变当占位） */
-const photos = ref([
-  { id: 1, isCover: true, bg: "linear-gradient(135deg,#f7d794,#546de5)" },
-  { id: 2, isCover: false, bg: "linear-gradient(135deg,#f78fb3,#c44569)" },
-  { id: 3, isCover: false, bg: "linear-gradient(135deg,#2ed573,#1e90ff)" },
-]);
+const photos = ref([]);
+const locationOptions = ref([]);
+
+onMounted(async () => {
+  const [locationRes, petRes] = await Promise.all([listPetLocations(), getPet(petId)]);
+  locationOptions.value = locationRes.data || [];
+  fillForm(petRes.data);
+});
+
+function fillForm(data = {}) {
+  form.name = data.name || "";
+  form.nickname = data.nickname || "";
+  form.locationId = data.locationId;
+  form.gender = data.gender || "";
+  form.ageText = data.age || "";
+  form.breed = data.breed || "";
+  form.color = data.color || "";
+  form.status = data.status || "available";
+  form.foundAt = data.foundDate || "";
+  form.foundLocation = data.foundLocation || "";
+  form.temperament = data.personality || "";
+  form.places = parseJsonArray(data.frequentLocations).join("\n");
+
+  const imageUrls = parseJsonArray(data.images);
+  const urls = imageUrls.length ? imageUrls : data.mainImage ? [data.mainImage] : [];
+  photos.value = urls.map((url, index) => ({
+    id: index + 1,
+    url,
+    isCover: url === data.mainImage || (!data.mainImage && index === 0),
+    bg: `url(${url}) center/cover no-repeat`,
+  }));
+}
 
 function goBack() {
   router.back();
@@ -202,6 +258,8 @@ function onPickFiles(e) {
     const url = URL.createObjectURL(f);
     return {
       id: startId + idx,
+      file: f,
+      url,
       isCover: false,
       bg: `url(${url}) center/cover no-repeat`,
     };
@@ -217,11 +275,61 @@ function onPickFiles(e) {
 async function onSave() {
   try {
     await formRef.value?.validate();
-    // TODO：后面接 API：updatePet(form.id, form + photos)
-    ElMessage.success("保存成功（mock）");
+    const imagePhotos = await uploadNewPhotos();
+    await updatePet(buildPayload(imagePhotos));
+    ElMessage.success("保存成功");
     router.push("/welfare/pet");
   } catch {
     // 校验失败
+  }
+}
+
+async function uploadNewPhotos() {
+  const result = [];
+  for (const photo of photos.value) {
+    if (photo.file) {
+      const res = await uploadPetImage(photo.file);
+      result.push({ ...photo, url: res.url });
+    } else {
+      result.push(photo);
+    }
+  }
+  return result;
+}
+
+function buildPayload(imagePhotos) {
+  const locations = form.places
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const cover = imagePhotos.find((item) => item.isCover) || imagePhotos[0];
+  return {
+    id: form.id,
+    locationId: form.locationId,
+    name: form.name,
+    nickname: form.nickname,
+    gender: form.gender,
+    age: form.ageText,
+    breed: form.breed,
+    color: form.color,
+    personality: form.temperament,
+    status: form.status,
+    foundDate: form.foundAt,
+    foundLocation: form.foundLocation || locations[0] || "",
+    frequentLocations: JSON.stringify(locations),
+    mainImage: cover?.url || "",
+    images: JSON.stringify(imagePhotos.map((item) => item.url)),
+    photoCount: imagePhotos.length,
+  };
+}
+
+function parseJsonArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
   }
 }
 </script>
