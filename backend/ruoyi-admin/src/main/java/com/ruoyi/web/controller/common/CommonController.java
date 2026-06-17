@@ -15,9 +15,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.core.domain.UploadedFile;
+import com.ruoyi.common.service.FileStorageService;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.common.utils.file.FileUploadUtils;
 import com.ruoyi.common.utils.file.FileUtils;
+import com.ruoyi.common.utils.file.MimeTypeUtils;
 import com.ruoyi.framework.config.ServerConfig;
 
 /**
@@ -33,6 +35,9 @@ public class CommonController
 
     @Autowired
     private ServerConfig serverConfig;
+
+    @Autowired
+    private FileStorageService fileStorageService;
 
     private static final String FILE_DELIMITER = ",";
 
@@ -79,12 +84,15 @@ public class CommonController
             // 上传文件路径
             String filePath = RuoYiConfig.getUploadPath();
             // 上传并返回新文件名称
-            String fileName = FileUploadUtils.upload(filePath, file);
-            String url = serverConfig.getUrl() + fileName;
+            UploadedFile uploadedFile = fileStorageService.upload(filePath, "upload", file,
+                    MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION, false);
+            String fileName = uploadedFile.getFileName();
+            String url = fileStorageService.isCos() ? fileStorageService.signUrl(uploadedFile.getUrl())
+                    : serverConfig.getUrl() + fileName;
             AjaxResult ajax = AjaxResult.success();
             ajax.put("url", url);
             ajax.put("fileName", fileName);
-            ajax.put("newFileName", FileUtils.getName(fileName));
+            ajax.put("newFileName", uploadedFile.getNewFileName());
             ajax.put("originalFilename", file.getOriginalFilename());
             return ajax;
         }
@@ -111,11 +119,14 @@ public class CommonController
             for (MultipartFile file : files)
             {
                 // 上传并返回新文件名称
-                String fileName = FileUploadUtils.upload(filePath, file);
-                String url = serverConfig.getUrl() + fileName;
+                UploadedFile uploadedFile = fileStorageService.upload(filePath, "upload", file,
+                        MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION, false);
+                String fileName = uploadedFile.getFileName();
+                String url = fileStorageService.isCos() ? fileStorageService.signUrl(uploadedFile.getUrl())
+                        : serverConfig.getUrl() + fileName;
                 urls.add(url);
                 fileNames.add(fileName);
-                newFileNames.add(FileUtils.getName(fileName));
+                newFileNames.add(uploadedFile.getNewFileName());
                 originalFilenames.add(file.getOriginalFilename());
             }
             AjaxResult ajax = AjaxResult.success();

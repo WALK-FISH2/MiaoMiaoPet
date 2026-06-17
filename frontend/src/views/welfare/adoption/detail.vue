@@ -264,7 +264,7 @@ function fillDetail(row) {
   data.pet.location = row.locationName || "-";
   data.pet.statusText = petStatusText(row.petStatus);
   data.pet.thumbBg = row.petMainImage
-    ? `url(${row.petMainImage}) center/cover no-repeat`
+    ? `url("${row.petMainImage}") center/cover no-repeat`
     : "linear-gradient(135deg, #ffd89b 0%, #19547b 100%)";
 
   data.applicant.name = row.name || "-";
@@ -291,7 +291,7 @@ function fillDetail(row) {
   data.env.acceptVisit = row.acceptRegularVisit === 1;
   data.envPhotos = parseJsonArray(row.houseImages).map((url, index) => ({
     id: index + 1,
-    bg: `url(${url}) center/cover no-repeat`,
+    bg: `url("${url}") center/cover no-repeat`,
   }));
   data.extra = row.otherInfo || "未填写";
 }

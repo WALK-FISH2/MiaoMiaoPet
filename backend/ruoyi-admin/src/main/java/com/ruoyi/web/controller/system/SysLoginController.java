@@ -15,6 +15,7 @@ import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.common.core.domain.model.LoginBody;
 import com.ruoyi.common.core.domain.model.LoginUser;
 import com.ruoyi.common.core.text.Convert;
+import com.ruoyi.common.service.FileStorageService;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
@@ -47,6 +48,9 @@ public class SysLoginController
     @Autowired
     private ISysConfigService configService;
 
+    @Autowired
+    private FileStorageService fileStorageService;
+
     /**
      * 登录方法
      * 
@@ -74,6 +78,7 @@ public class SysLoginController
     {
         LoginUser loginUser = SecurityUtils.getLoginUser();
         SysUser user = loginUser.getUser();
+        user.setAvatar(fileStorageService.signUrl(user.getAvatar()));
         // 角色集合
         Set<String> roles = permissionService.getRolePermission(user);
         // 权限集合

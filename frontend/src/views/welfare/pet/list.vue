@@ -256,7 +256,7 @@ function normalizePetRow(row) {
     updatedDate: updated.date,
     updatedTime: updated.time,
     avatarBg: row.mainImage
-      ? `url(${row.mainImage}) center/cover no-repeat`
+      ? `url("${row.mainImage}") center/cover no-repeat`
       : "linear-gradient(135deg,#f7d794,#546de5)",
   };
 }

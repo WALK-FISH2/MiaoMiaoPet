@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.service.FileStorageService;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.WelfareLocationOption;
 import com.ruoyi.system.domain.WelfarePet;
@@ -16,16 +17,23 @@ public class WelfarePetServiceImpl implements IWelfarePetService
     @Autowired
     private WelfarePetMapper petMapper;
 
+    @Autowired
+    private FileStorageService fileStorageService;
+
     @Override
     public List<WelfarePet> selectPetList(String keyword, String status, String breed)
     {
-        return petMapper.selectPetList(keyword, status, breed);
+        List<WelfarePet> list = petMapper.selectPetList(keyword, status, breed);
+        list.forEach(this::signPetImages);
+        return list;
     }
 
     @Override
     public WelfarePet selectPetById(Long id)
     {
-        return petMapper.selectPetById(id);
+        WelfarePet pet = petMapper.selectPetById(id);
+        signPetImages(pet);
+        return pet;
     }
 
     @Override
@@ -93,5 +101,15 @@ public class WelfarePetServiceImpl implements IWelfarePetService
         {
             throw new ServiceException("宠物状态只能是 available、adopting 或 adopted");
         }
+    }
+
+    private void signPetImages(WelfarePet pet)
+    {
+        if (pet == null)
+        {
+            return;
+        }
+        pet.setMainImage(fileStorageService.signUrl(pet.getMainImage()));
+        pet.setImages(fileStorageService.signJsonArray(pet.getImages()));
     }
 }

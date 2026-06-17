@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.service.FileStorageService;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.system.domain.WelfareAdoptionApplication;
 import com.ruoyi.system.domain.WelfareAdoptionStats;
@@ -16,16 +17,23 @@ public class WelfareAdoptionServiceImpl implements IWelfareAdoptionService
     @Autowired
     private WelfareAdoptionMapper adoptionMapper;
 
+    @Autowired
+    private FileStorageService fileStorageService;
+
     @Override
     public List<WelfareAdoptionApplication> selectApplicationList(String status, String keyword)
     {
-        return adoptionMapper.selectApplicationList(status, keyword);
+        List<WelfareAdoptionApplication> list = adoptionMapper.selectApplicationList(status, keyword);
+        list.forEach(this::signApplicationImages);
+        return list;
     }
 
     @Override
     public WelfareAdoptionApplication selectApplicationById(Long id)
     {
-        return adoptionMapper.selectApplicationById(id);
+        WelfareAdoptionApplication application = adoptionMapper.selectApplicationById(id);
+        signApplicationImages(application);
+        return application;
     }
 
     @Override
@@ -63,5 +71,16 @@ public class WelfareAdoptionServiceImpl implements IWelfareAdoptionService
             adoptionMapper.updatePetStatus(application.getPetId(), "adopted");
         }
         return rows;
+    }
+
+    private void signApplicationImages(WelfareAdoptionApplication application)
+    {
+        if (application == null)
+        {
+            return;
+        }
+        application.setHouseImages(fileStorageService.signJsonArray(application.getHouseImages()));
+        application.setPetMainImage(fileStorageService.signUrl(application.getPetMainImage()));
+        application.setAdoptionContract(fileStorageService.signUrl(application.getAdoptionContract()));
     }
 }

@@ -260,7 +260,7 @@ function normalizeApplication(row) {
     barColor: colors.bar,
     bgColor: colors.bg,
     thumbBg: row.petMainImage
-      ? `url(${row.petMainImage}) center/cover no-repeat`
+      ? `url("${row.petMainImage}") center/cover no-repeat`
       : "linear-gradient(135deg,#f7d794,#546de5)",
   };
 }
