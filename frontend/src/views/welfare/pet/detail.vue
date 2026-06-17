@@ -144,7 +144,7 @@
         </label>
       </div>
 
-      <div class="photo-tip">说明：当前为前端预览版；后续对接后端后会改为真实上传。</div>
+      <!-- <div class="photo-tip">说明：当前为前端预览版；后续对接后端后会改为真实上传。</div> -->
     </el-card>
   </div>
 </template>

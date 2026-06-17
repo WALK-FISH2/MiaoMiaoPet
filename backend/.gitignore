@@ -44,6 +44,7 @@ nbdist/
 
 # Local config files
 backend/ruoyi-admin/src/main/resources/application-druid.yml
+backend/ruoyi-admin/src/main/resources/application.yml
 
 !*/build/*.java
 !*/build/*.html
